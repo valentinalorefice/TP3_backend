@@ -1,12 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using ArticulosAPI.Data;
+using ArticulosAPI.Dto;
 using ArticulosAPI.Modelos;
+using ArticulosAPI.Repositorio;
+using AutoMapper;
+using Microsoft.AspNetCore.Mvc;
 
 namespace ArticulosAPI.Controllers
 {
@@ -14,95 +10,70 @@ namespace ArticulosAPI.Controllers
     [ApiController]
     public class ArticulosController : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
+        private readonly IArticuloRepositorio _repositorio;
+        private readonly IMapper _mapper;
 
-        public ArticulosController(ApplicationDbContext context)
+        public ArticulosController(IArticuloRepositorio repositorio, IMapper mapper)
         {
-            _context = context;
+            _repositorio = repositorio;
+            _mapper = mapper;
         }
 
         // GET: api/Articulos
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Articulo>>> GetArticulos()
+        public async Task<ActionResult<IEnumerable<ArticuloDto>>> GetArticulos()
         {
-            return await _context.Articulos.ToListAsync();
+            var articulos = await _repositorio.ObtenerTodos();
+            var articulosDto = _mapper.Map<IEnumerable<ArticuloDto>>(articulos);
+            return Ok(articulosDto);
         }
 
         // GET: api/Articulos/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Articulo>> GetArticulo(int id)
+        public async Task<ActionResult<ArticuloDto>> GetArticulo(int id)
         {
-            var articulo = await _context.Articulos.FindAsync(id);
-
+            var articulo = await _repositorio.ObtenerPorId(id);
             if (articulo == null)
-            {
                 return NotFound();
-            }
 
-            return articulo;
-        }
-
-        // PUT: api/Articulos/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutArticulo(int id, Articulo articulo)
-        {
-            if (id != articulo.Id)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(articulo).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!ArticuloExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
+            var dto = _mapper.Map<ArticuloDto>(articulo);
+            return Ok(dto);
         }
 
         // POST: api/Articulos
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-        public async Task<ActionResult<Articulo>> PostArticulo(Articulo articulo)
+        public async Task<ActionResult<ArticuloDto>> PostArticulo(ArticuloDto dto)
         {
-            _context.Articulos.Add(articulo);
-            await _context.SaveChangesAsync();
+            var articulo = _mapper.Map<Articulo>(dto);
+            await _repositorio.Crear(articulo);
 
-            return CreatedAtAction("GetArticulo", new { id = articulo.Id }, articulo);
+            var creado = _mapper.Map<ArticuloDto>(articulo);
+            return CreatedAtAction(nameof(GetArticulo), new { id = creado.Id }, creado);
+        }
+
+        // PUT: api/Articulos/5
+        [HttpPut("{id}")]
+        public async Task<IActionResult> PutArticulo(int id, ArticuloDto dto)
+        {
+            if (id != dto.Id)
+                return BadRequest();
+
+            var articulo = _mapper.Map<Articulo>(dto);
+            await _repositorio.Actualizar(articulo);
+
+            return NoContent();
         }
 
         // DELETE: api/Articulos/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteArticulo(int id)
         {
-            var articulo = await _context.Articulos.FindAsync(id);
-            if (articulo == null)
-            {
+            var existente = await _repositorio.ObtenerPorId(id);
+            if (existente == null)
                 return NotFound();
-            }
 
-            _context.Articulos.Remove(articulo);
-            await _context.SaveChangesAsync();
-
+            await _repositorio.Eliminar(id);
             return NoContent();
-        }
-
-        private bool ArticuloExists(int id)
-        {
-            return _context.Articulos.Any(e => e.Id == id);
         }
     }
 }
